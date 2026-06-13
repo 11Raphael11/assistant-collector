@@ -14,7 +14,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# lib/  — commented out: src/lib/ is part of the project tree
 lib64/
 parts/
 sdist/
