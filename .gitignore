@@ -1,6 +1,5 @@
 # Node
 node_modules/
-dist/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -18,7 +17,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-# lib/  — commented out: src/lib/ is part of the project tree
+# lib/
 lib64/
 parts/
 sdist/
