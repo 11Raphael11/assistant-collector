@@ -76,6 +76,28 @@ export function toGregorian(jy: number, jm: number, jd: number): Date {
   return new Date(utcMidnight - offset * 60000);
 }
 
+function jalaliMonthLength(jy: number, jm: number): number {
+  if (jm >= 1 && jm <= 6) return 31;
+  if (jm >= 7 && jm <= 11) return 30;
+  return jalaali.isLeapJalaaliYear(jy) ? 30 : 29;
+}
+
+export function addJalaliMonths(date: Date, months: number): Date {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    throw new Error("INVALID_DATE");
+  }
+  if (!Number.isInteger(months)) {
+    throw new Error("INVALID_MONTHS");
+  }
+  const { jy, jm, jd } = toJalali(date);
+  const zeroBased = jy * 12 + (jm - 1) + months;
+  const targetY = Math.floor(zeroBased / 12);
+  const targetM = ((zeroBased % 12) + 12) % 12 + 1;
+  const maxDay = jalaliMonthLength(targetY, targetM);
+  const targetD = Math.min(jd, maxDay);
+  return toGregorian(targetY, targetM, targetD);
+}
+
 export function formatJalali(date: Date): string {
   const { jy, jm, jd } = toJalali(date);
   const s = `${String(jy).padStart(4, "0")}/${String(jm).padStart(2, "0")}/${String(jd).padStart(2, "0")}`;
