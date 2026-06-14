@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { decryptPII, encryptPII } from "./crypto";
+import { blindIndex, decryptPII, encryptPII, last4 } from "./crypto";
 
 beforeAll(() => {
   process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/db";
@@ -65,5 +65,42 @@ describe("encryptPII / decryptPII", () => {
     expect(decryptPII("v2:a:b:c").ok).toBe(false);
     expect(decryptPII("v1:a:b").ok).toBe(false);
     expect(decryptPII("v1:!!!:!!!:!!!").ok).toBe(false);
+  });
+});
+
+describe("blindIndex", () => {
+  it("happy: deterministic — same input yields same index across calls", () => {
+    const a = blindIndex("09123456789");
+    const b = blindIndex("09123456789");
+    expect(a).toBe(b);
+  });
+
+  it("happy: output is lowercase hex of length 64 (sha256)", () => {
+    const h = blindIndex("09123456789");
+    expect(h).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("edge: different inputs produce different indexes", () => {
+    expect(blindIndex("09123456789")).not.toBe(blindIndex("09123456788"));
+    expect(blindIndex("")).not.toBe(blindIndex("a"));
+  });
+
+  it("edge: not equal to plain SHA-256 (keyed HMAC, not raw hash)", () => {
+    // sanity: hand-computed sha256 of "x" differs from blindIndex("x")
+    const sha256OfX =
+      "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881";
+    expect(blindIndex("x")).not.toBe(sha256OfX);
+  });
+});
+
+describe("last4", () => {
+  it("happy: returns the final 4 chars of a mobile-like string", () => {
+    expect(last4("09123456789")).toBe("6789");
+  });
+
+  it("edge: returns the whole string when length <= 4 (no crash)", () => {
+    expect(last4("12")).toBe("12");
+    expect(last4("1234")).toBe("1234");
+    expect(last4("")).toBe("");
   });
 });

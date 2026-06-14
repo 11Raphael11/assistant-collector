@@ -1,4 +1,9 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHmac,
+  randomBytes,
+} from "node:crypto";
 import { env } from "./env";
 import { err, ok, type Result } from "./result";
 
@@ -9,6 +14,10 @@ const VERSION = "v1";
 
 function getKey(): Buffer {
   return Buffer.from(env.ENCRYPTION_KEY, "hex");
+}
+
+function getBlindIndexKey(): Buffer {
+  return Buffer.from(env.BLIND_INDEX_KEY, "hex");
 }
 
 export function encryptPII(plain: string): string {
@@ -55,4 +64,22 @@ export function decryptPII(token: string): Result<string> {
   } catch (e) {
     return err("DECRYPT_FAILED", "auth tag verification failed", e);
   }
+}
+
+// Deterministic HMAC-SHA256 over the (already-normalized) value, keyed by
+// BLIND_INDEX_KEY. Returned as lowercase hex so it can back a UNIQUE index
+// and equality search. NOTE: this is intentionally deterministic — unlike
+// encryptPII which is non-deterministic (random IV). Determinism enables
+// uniqueness/search; encryption uses a separate key to avoid leaking the
+// index key when ciphertexts are exposed.
+export function blindIndex(value: string): string {
+  return createHmac("sha256", getBlindIndexKey()).update(value, "utf8").digest("hex");
+}
+
+// Returns the final 4 characters of the value for display/user search.
+// Safe on inputs shorter than 4 characters: returns whatever is available
+// (including empty string for empty input) — never throws.
+export function last4(value: string): string {
+  if (value.length <= 4) return value;
+  return value.slice(-4);
 }
