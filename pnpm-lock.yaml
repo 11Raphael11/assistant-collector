@@ -11,6 +11,9 @@ importers:
       '@prisma/client':
         specifier: ^5.22.0
         version: 5.22.0(prisma@5.22.0)
+      jalaali-js:
+        specifier: ^1.2.8
+        version: 1.2.8
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -267,6 +270,9 @@ packages:
 
   globrex@0.1.2:
     resolution: {integrity: sha512-uHJgbwAMwNFf5mLst7IWLNg14x1CkeqglJb/K3doi4dw6q2IvAAmM/Y81kevy83wP+Sst+nutFTYOGg3d1lsxg==}
+
+  jalaali-js@1.2.8:
+    resolution: {integrity: sha512-Jl/EwY84JwjW2wsWqeU4pNd22VNQ7EkjI36bDuLw31wH98WQW4fPjD0+mG7cdCK+Y8D6s9R3zLiQ3LaKu6bD8A==}
 
   lightningcss-android-arm64@1.32.0:
     resolution: {integrity: sha512-YK7/ClTt4kAK0vo6w3X+Pnm0D2cf2vPHbhOXdoNti1Ga0al1P4TBZhwjATvjNwLEBCnKvjJc2jQgHXH0NEwlAg==}
@@ -714,6 +720,8 @@ snapshots:
     optional: true
 
   globrex@0.1.2: {}
+
+  jalaali-js@1.2.8: {}
 
   lightningcss-android-arm64@1.32.0:
     optional: true
