@@ -5,6 +5,8 @@ describe("Business model", () => {
   const prisma = new PrismaClient();
 
   afterAll(async () => {
+    await prisma.subscription.deleteMany();
+    await prisma.plan.deleteMany();
     await prisma.business.deleteMany();
     await prisma.$disconnect();
   });
@@ -47,5 +49,68 @@ describe("Business model", () => {
     expect(
       (prisma as unknown as Record<string, unknown>)["ping"],
     ).toBeUndefined();
+  });
+
+  it("happy: create a Plan + Subscription for a Business and relations resolve", async () => {
+    const business = await prisma.business.create({
+      data: { name: "Sub Shop", type: "retail" },
+    });
+
+    const plan = await prisma.plan.create({
+      data: {
+        name: "Starter",
+        customerCap: 100,
+        smsQuota: 500,
+        monthlyPriceRial: 1_000_000,
+        features: { portal: true, ai: false },
+      },
+    });
+
+    const startsAt = new Date();
+    const endsAt = new Date(startsAt.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    const subscription = await prisma.subscription.create({
+      data: {
+        businessId: business.id,
+        planId: plan.id,
+        status: "active",
+        startsAt,
+        endsAt,
+      },
+    });
+
+    expect(subscription.id).toBeTruthy();
+    expect(subscription.businessId).toBe(business.id);
+    expect(subscription.planId).toBe(plan.id);
+    expect(subscription.status).toBe("active");
+    expect(subscription.endsAt).toEqual(endsAt);
+    expect(subscription.graceUntil).toBeNull();
+
+    const withRelations = await prisma.subscription.findUnique({
+      where: { id: subscription.id },
+      include: { business: true, plan: true },
+    });
+    expect(withRelations).not.toBeNull();
+    expect(withRelations!.business.id).toBe(business.id);
+    expect(withRelations!.plan.id).toBe(plan.id);
+    expect(withRelations!.plan.customerCap).toBe(100);
+    expect(withRelations!.plan.features).toEqual({ portal: true, ai: false });
+  });
+
+  it("edge: a Subscription referencing a non-existent Plan fails the FK constraint", async () => {
+    const business = await prisma.business.create({
+      data: { name: "FK Shop", type: "retail" },
+    });
+
+    await expect(
+      prisma.subscription.create({
+        data: {
+          businessId: business.id,
+          planId: "plan_does_not_exist",
+          status: "active",
+          startsAt: new Date(),
+        },
+      }),
+    ).rejects.toThrow();
   });
 });
