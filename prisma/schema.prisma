@@ -7,8 +7,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Ping {
-  id        String   @id @default(cuid())
-  note      String
-  createdAt DateTime @default(now())
+model Business {
+  id               String    @id @default(cuid())
+  name             String
+  type             String
+  brandColor       String?
+  logoUrl          String?
+  supportPhone     String?
+  smsCreditBalance Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
 }
