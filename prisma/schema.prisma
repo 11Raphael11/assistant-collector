@@ -19,6 +19,28 @@ model Business {
   updatedAt        DateTime       @updatedAt
   deletedAt        DateTime?
   subscriptions    Subscription[]
+  users            User[]
+}
+
+enum UserRole {
+  owner
+  staff
+}
+
+model User {
+  id             String   @id @default(cuid())
+  businessId     String
+  phoneEnc       Bytes
+  phoneHash      String   @unique
+  phoneLast4     String
+  passwordHash   String
+  role           UserRole
+  sessionVersion Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  business       Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId])
 }
 
 model Plan {

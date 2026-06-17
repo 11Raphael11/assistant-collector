@@ -5,6 +5,7 @@ describe("Business model", () => {
   const prisma = new PrismaClient();
 
   afterAll(async () => {
+    await prisma.user.deleteMany();
     await prisma.subscription.deleteMany();
     await prisma.plan.deleteMany();
     await prisma.business.deleteMany();
@@ -109,6 +110,76 @@ describe("Business model", () => {
           planId: "plan_does_not_exist",
           status: "active",
           startsAt: new Date(),
+        },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("happy: create a User under a Business with PII triple, role and default sessionVersion=0", async () => {
+    const business = await prisma.business.create({
+      data: { name: "User Shop", type: "retail" },
+    });
+
+    const phoneEnc = Buffer.from("encrypted-phone-bytes-1", "utf8");
+    const phoneHash = "hash_happy_user_1";
+
+    const user = await prisma.user.create({
+      data: {
+        businessId: business.id,
+        phoneEnc,
+        phoneHash,
+        phoneLast4: "1234",
+        passwordHash: "bcrypt$dummy$hash",
+        role: "owner",
+      },
+    });
+
+    expect(user.id).toBeTruthy();
+    expect(user.businessId).toBe(business.id);
+    expect(Buffer.from(user.phoneEnc).equals(phoneEnc)).toBe(true);
+    expect(user.phoneHash).toBe(phoneHash);
+    expect(user.phoneLast4).toBe("1234");
+    expect(user.passwordHash).toBe("bcrypt$dummy$hash");
+    expect(user.role).toBe("owner");
+    expect(user.sessionVersion).toBe(0);
+    expect(user.createdAt).toBeInstanceOf(Date);
+    expect(user.updatedAt).toBeInstanceOf(Date);
+
+    const withBusiness = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: { business: true },
+    });
+    expect(withBusiness).not.toBeNull();
+    expect(withBusiness!.business.id).toBe(business.id);
+  });
+
+  it("edge: a second User with the same phoneHash violates the UNIQUE constraint", async () => {
+    const business = await prisma.business.create({
+      data: { name: "Unique Phone Shop", type: "retail" },
+    });
+
+    const phoneHash = "hash_edge_duplicate_1";
+
+    await prisma.user.create({
+      data: {
+        businessId: business.id,
+        phoneEnc: Buffer.from("enc-a", "utf8"),
+        phoneHash,
+        phoneLast4: "9999",
+        passwordHash: "bcrypt$dummy$a",
+        role: "owner",
+      },
+    });
+
+    await expect(
+      prisma.user.create({
+        data: {
+          businessId: business.id,
+          phoneEnc: Buffer.from("enc-b", "utf8"),
+          phoneHash,
+          phoneLast4: "9999",
+          passwordHash: "bcrypt$dummy$b",
+          role: "staff",
         },
       }),
     ).rejects.toThrow();
