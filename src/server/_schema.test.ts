@@ -5,6 +5,8 @@ describe("Business model", () => {
   const prisma = new PrismaClient();
 
   afterAll(async () => {
+    await prisma.message.deleteMany();
+    await prisma.messageTemplate.deleteMany();
     await prisma.paymentLog.deleteMany();
     await prisma.paymentToken.deleteMany();
     await prisma.installment.deleteMany();
@@ -632,6 +634,116 @@ describe("Business model", () => {
         },
       }),
     ).rejects.toThrow();
+  });
+
+  it("happy: enqueue a Message with defaults status=queued, attempts=0", async () => {
+    const business = await prisma.business.create({
+      data: { name: "Outbox Shop", type: "retail" },
+    });
+    const customer = await prisma.customer.create({
+      data: {
+        businessId: business.id,
+        name: "محمد رضایی",
+        nameNormalized: "محمد رضایی",
+        phoneEnc: Buffer.from("enc-m-1", "utf8"),
+        phoneHash: "hash_message_happy_1",
+        phoneLast4: "0001",
+      },
+    });
+    const contract = await prisma.contract.create({
+      data: {
+        businessId: business.id,
+        customerId: customer.id,
+        totalAmountRial: 10_000_000,
+        downPaymentRial: 0,
+        installmentCount: 1,
+        intervalMonths: 1,
+        startDate: new Date("2026-01-01T00:00:00.000Z"),
+      },
+    });
+    const installment = await prisma.installment.create({
+      data: {
+        businessId: business.id,
+        contractId: contract.id,
+        seq: 1,
+        amountRial: 10_000_000,
+        dueDate: new Date("2026-02-01T00:00:00.000Z"),
+      },
+    });
+
+    const msg = await prisma.message.create({
+      data: {
+        businessId: business.id,
+        installmentId: installment.id,
+        to: "+989120000001",
+        body: "یادآور قسط",
+        stage: "before",
+        idempotencyKey: "idemp_happy_unique_1",
+      },
+    });
+
+    expect(msg.id).toBeTruthy();
+    expect(msg.businessId).toBe(business.id);
+    expect(msg.installmentId).toBe(installment.id);
+    expect(msg.to).toBe("+989120000001");
+    expect(msg.body).toBe("یادآور قسط");
+    expect(msg.stage).toBe("before");
+    expect(msg.status).toBe("queued");
+    expect(msg.attempts).toBe(0);
+    expect(msg.idempotencyKey).toBe("idemp_happy_unique_1");
+    expect(msg.nextAttemptAt).toBeNull();
+    expect(msg.providerRef).toBeNull();
+    expect(msg.createdAt).toBeInstanceOf(Date);
+
+    const template = await prisma.messageTemplate.create({
+      data: {
+        businessId: business.id,
+        kind: "before",
+        tone: "friendly",
+        body: "سلام {{name}}، قسط شما نزدیک است",
+      },
+    });
+    expect(template.id).toBeTruthy();
+    expect(template.kind).toBe("before");
+    expect(template.tone).toBe("friendly");
+    expect(template.body).toContain("{{name}}");
+  });
+
+  it("edge: a duplicate Message idempotencyKey violates the UNIQUE (prevents bug #1 double-SMS)", async () => {
+    const business = await prisma.business.create({
+      data: { name: "Outbox Unique Shop", type: "retail" },
+    });
+
+    await prisma.message.create({
+      data: {
+        businessId: business.id,
+        to: "+989120000002",
+        body: "OTP code",
+        stage: "otp",
+        idempotencyKey: "idemp_duplicate_1",
+      },
+    });
+
+    await expect(
+      prisma.message.create({
+        data: {
+          businessId: business.id,
+          to: "+989120000002",
+          body: "OTP code",
+          stage: "otp",
+          idempotencyKey: "idemp_duplicate_1",
+        },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("happy: the (status, nextAttemptAt) index exists for the outbox processor", async () => {
+    const rows = await prisma.$queryRawUnsafe<Array<{ indexname: string; indexdef: string }>>(
+      `SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'Message' AND indexname = 'Message_status_nextAttemptAt_idx'`,
+    );
+    expect(rows.length).toBe(1);
+    expect(rows[0].indexdef).toMatch(/\bstatus\b/);
+    expect(rows[0].indexdef).toMatch(/"nextAttemptAt"/);
   });
 
   it("happy: the critical (dueDate, status) index exists (prevents full scans / bug #6)", async () => {
