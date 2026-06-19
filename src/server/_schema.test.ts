@@ -5,6 +5,7 @@ describe("Business model", () => {
   const prisma = new PrismaClient();
 
   afterAll(async () => {
+    await prisma.followUpEvent.deleteMany();
     await prisma.message.deleteMany();
     await prisma.messageTemplate.deleteMany();
     await prisma.paymentLog.deleteMany();
@@ -744,6 +745,117 @@ describe("Business model", () => {
     expect(rows.length).toBe(1);
     expect(rows[0].indexdef).toMatch(/\bstatus\b/);
     expect(rows[0].indexdef).toMatch(/"nextAttemptAt"/);
+  });
+
+  it("happy: create a FollowUpEvent of type promise_to_pay with defaults and filter by (businessId, seenByBusiness=false)", async () => {
+    const business = await prisma.business.create({
+      data: { name: "FollowUp Shop", type: "retail" },
+    });
+    const customer = await prisma.customer.create({
+      data: {
+        businessId: business.id,
+        name: "آرش جعفری",
+        nameNormalized: "آرش جعفری",
+        phoneEnc: Buffer.from("enc-f-1", "utf8"),
+        phoneHash: "hash_followup_happy_1",
+        phoneLast4: "0011",
+      },
+    });
+    const contract = await prisma.contract.create({
+      data: {
+        businessId: business.id,
+        customerId: customer.id,
+        totalAmountRial: 10_000_000,
+        downPaymentRial: 0,
+        installmentCount: 1,
+        intervalMonths: 1,
+        startDate: new Date("2026-01-01T00:00:00.000Z"),
+      },
+    });
+    const installment = await prisma.installment.create({
+      data: {
+        businessId: business.id,
+        contractId: contract.id,
+        seq: 1,
+        amountRial: 10_000_000,
+        dueDate: new Date("2026-02-01T00:00:00.000Z"),
+      },
+    });
+
+    const promisedDate = new Date("2026-02-10T00:00:00.000Z");
+    const event = await prisma.followUpEvent.create({
+      data: {
+        businessId: business.id,
+        customerId: customer.id,
+        installmentId: installment.id,
+        type: "promise_to_pay",
+        promisedDate,
+        note: "تماس شد، قول ده روزه داد",
+      },
+    });
+
+    expect(event.id).toBeTruthy();
+    expect(event.businessId).toBe(business.id);
+    expect(event.customerId).toBe(customer.id);
+    expect(event.installmentId).toBe(installment.id);
+    expect(event.type).toBe("promise_to_pay");
+    expect(event.promisedDate!.toISOString()).toBe(promisedDate.toISOString());
+    expect(event.note).toBe("تماس شد، قول ده روزه داد");
+    expect(event.seenByBusiness).toBe(false);
+    expect(event.createdAt).toBeInstanceOf(Date);
+
+    const seenEvent = await prisma.followUpEvent.create({
+      data: {
+        businessId: business.id,
+        customerId: customer.id,
+        type: "note",
+        note: "یادداشت دیده‌شده",
+        seenByBusiness: true,
+      },
+    });
+    expect(seenEvent.seenByBusiness).toBe(true);
+
+    const unseen = await prisma.followUpEvent.findMany({
+      where: { businessId: business.id, seenByBusiness: false },
+    });
+    expect(unseen.length).toBe(1);
+    expect(unseen[0].id).toBe(event.id);
+  });
+
+  it("edge: an unknown FollowUpEvent type value is rejected by the enum", async () => {
+    const business = await prisma.business.create({
+      data: { name: "FollowUp Enum Shop", type: "retail" },
+    });
+    const customer = await prisma.customer.create({
+      data: {
+        businessId: business.id,
+        name: "نازنین رستمی",
+        nameNormalized: "نازنین رستمی",
+        phoneEnc: Buffer.from("enc-f-2", "utf8"),
+        phoneHash: "hash_followup_edge_1",
+        phoneLast4: "0022",
+      },
+    });
+
+    await expect(
+      prisma.$executeRawUnsafe(
+        `INSERT INTO "FollowUpEvent" ("id","businessId","customerId","type","seenByBusiness","createdAt") VALUES ($1,$2,$3,$4::"FollowUpEventType",$5,NOW())`,
+        "fue_invalid_type_1",
+        business.id,
+        customer.id,
+        "not_a_real_type",
+        false,
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("happy: the (businessId, seenByBusiness) index exists for unseen-notification scans", async () => {
+    const rows = await prisma.$queryRawUnsafe<Array<{ indexname: string; indexdef: string }>>(
+      `SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'FollowUpEvent' AND indexname = 'FollowUpEvent_businessId_seenByBusiness_idx'`,
+    );
+    expect(rows.length).toBe(1);
+    expect(rows[0].indexdef).toMatch(/"businessId"/);
+    expect(rows[0].indexdef).toMatch(/"seenByBusiness"/);
   });
 
   it("happy: the critical (dueDate, status) index exists (prevents full scans / bug #6)", async () => {

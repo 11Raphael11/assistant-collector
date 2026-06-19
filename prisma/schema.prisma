@@ -27,6 +27,7 @@ model Business {
   paymentLogs      PaymentLog[]
   messages         Message[]
   messageTemplates MessageTemplate[]
+  followUpEvents   FollowUpEvent[]
 }
 
 model Customer {
@@ -44,6 +45,7 @@ model Customer {
   deletedAt        DateTime?
   business         Business  @relation(fields: [businessId], references: [id])
   contracts        Contract[]
+  followUpEvents   FollowUpEvent[]
 
   @@unique([businessId, phoneHash])
   @@index([businessId])
@@ -106,6 +108,7 @@ model Installment {
   paymentTokens      PaymentToken[]
   paymentLogs        PaymentLog[]
   messages           Message[]
+  followUpEvents     FollowUpEvent[]
 
   @@index([dueDate, status])
   @@index([businessId, status])
@@ -204,6 +207,32 @@ model MessageTemplate {
   business   Business     @relation(fields: [businessId], references: [id])
 
   @@index([businessId, kind, tone])
+}
+
+enum FollowUpEventType {
+  promise_to_pay
+  extension_request
+  note
+}
+
+model FollowUpEvent {
+  id              String            @id @default(cuid())
+  businessId      String
+  customerId      String
+  installmentId   String?
+  type            FollowUpEventType
+  promisedDate    DateTime?
+  note            String?
+  seenByBusiness  Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+  business        Business          @relation(fields: [businessId], references: [id])
+  customer        Customer          @relation(fields: [customerId], references: [id])
+  installment     Installment?      @relation(fields: [installmentId], references: [id])
+
+  @@index([businessId, seenByBusiness])
+  @@index([businessId, promisedDate])
+  @@index([customerId])
+  @@index([installmentId])
 }
 
 enum UserRole {
