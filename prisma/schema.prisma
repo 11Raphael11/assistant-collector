@@ -303,6 +303,17 @@ model Session {
   @@index([userId])
 }
 
+model OtpCode {
+  id         String    @id @default(cuid())
+  phoneHash  String
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phoneHash, expiresAt])
+}
+
 model RateBucket {
   key         String
   windowStart DateTime @db.Timestamptz
