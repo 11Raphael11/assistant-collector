@@ -20,6 +20,27 @@ model Business {
   deletedAt        DateTime?
   subscriptions    Subscription[]
   users            User[]
+  customers        Customer[]
+}
+
+model Customer {
+  id               String    @id @default(cuid())
+  businessId       String
+  name             String
+  nameNormalized   String
+  phoneEnc         Bytes
+  phoneHash        String
+  phoneLast4       String
+  nationalIdEnc    Bytes?
+  nationalIdHash   String?
+  note             String?
+  createdAt        DateTime  @default(now())
+  deletedAt        DateTime?
+  business         Business  @relation(fields: [businessId], references: [id])
+
+  @@unique([businessId, phoneHash])
+  @@index([businessId])
+  @@index([businessId, nameNormalized])
 }
 
 enum UserRole {
