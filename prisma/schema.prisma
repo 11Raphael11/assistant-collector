@@ -23,6 +23,8 @@ model Business {
   customers        Customer[]
   contracts        Contract[]
   installments     Installment[]
+  paymentTokens    PaymentToken[]
+  paymentLogs      PaymentLog[]
 }
 
 model Customer {
@@ -99,10 +101,49 @@ model Installment {
   deletedAt          DateTime?
   business           Business          @relation(fields: [businessId], references: [id])
   contract           Contract          @relation(fields: [contractId], references: [id])
+  paymentTokens      PaymentToken[]
+  paymentLogs        PaymentLog[]
 
   @@index([dueDate, status])
   @@index([businessId, status])
   @@index([contractId])
+}
+
+model PaymentToken {
+  id            String       @id @default(cuid())
+  businessId    String
+  installmentId String
+  token         String       @unique
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime     @default(now())
+  business      Business     @relation(fields: [businessId], references: [id])
+  installment   Installment  @relation(fields: [installmentId], references: [id])
+
+  @@index([businessId, expiresAt])
+  @@index([installmentId])
+}
+
+enum PaymentLogStatus {
+  pending
+  paid
+  failed
+}
+
+model PaymentLog {
+  id            String           @id @default(cuid())
+  businessId    String
+  installmentId String
+  transactionId String           @unique
+  amountRial    Int
+  status        PaymentLogStatus @default(pending)
+  authority     String?
+  createdAt     DateTime         @default(now())
+  business      Business         @relation(fields: [businessId], references: [id])
+  installment   Installment      @relation(fields: [installmentId], references: [id])
+
+  @@index([businessId, createdAt])
+  @@index([installmentId])
 }
 
 enum UserRole {

@@ -5,6 +5,8 @@ describe("Business model", () => {
   const prisma = new PrismaClient();
 
   afterAll(async () => {
+    await prisma.paymentLog.deleteMany();
+    await prisma.paymentToken.deleteMany();
     await prisma.installment.deleteMany();
     await prisma.contract.deleteMany();
     await prisma.customer.deleteMany();
@@ -433,6 +435,202 @@ describe("Business model", () => {
         "not_a_real_status",
         0,
       ),
+    ).rejects.toThrow();
+  });
+
+  it("happy: create a PaymentToken + a PaymentLog and read back by token + transactionId", async () => {
+    const business = await prisma.business.create({
+      data: { name: "Payment Shop", type: "retail" },
+    });
+    const customer = await prisma.customer.create({
+      data: {
+        businessId: business.id,
+        name: "رضا قاسمی",
+        nameNormalized: "رضا قاسمی",
+        phoneEnc: Buffer.from("enc-p-1", "utf8"),
+        phoneHash: "hash_payment_happy_1",
+        phoneLast4: "6666",
+      },
+    });
+    const contract = await prisma.contract.create({
+      data: {
+        businessId: business.id,
+        customerId: customer.id,
+        totalAmountRial: 50_000_000,
+        downPaymentRial: 0,
+        installmentCount: 5,
+        intervalMonths: 1,
+        startDate: new Date("2026-07-01T00:00:00.000Z"),
+      },
+    });
+    const installment = await prisma.installment.create({
+      data: {
+        businessId: business.id,
+        contractId: contract.id,
+        seq: 1,
+        amountRial: 10_000_000,
+        dueDate: new Date("2026-08-01T00:00:00.000Z"),
+      },
+    });
+
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    const token = await prisma.paymentToken.create({
+      data: {
+        businessId: business.id,
+        installmentId: installment.id,
+        token: "tok_happy_unique_1",
+        expiresAt,
+      },
+    });
+
+    expect(token.id).toBeTruthy();
+    expect(token.token).toBe("tok_happy_unique_1");
+    expect(token.usedAt).toBeNull();
+    expect(token.expiresAt.toISOString()).toBe(expiresAt.toISOString());
+    expect(token.createdAt).toBeInstanceOf(Date);
+
+    const log = await prisma.paymentLog.create({
+      data: {
+        businessId: business.id,
+        installmentId: installment.id,
+        transactionId: "txn_happy_unique_1",
+        amountRial: 10_000_000,
+        authority: "auth_abc_1",
+      },
+    });
+
+    expect(log.id).toBeTruthy();
+    expect(log.transactionId).toBe("txn_happy_unique_1");
+    expect(Number.isInteger(log.amountRial)).toBe(true);
+    expect(log.amountRial).toBe(10_000_000);
+    expect(log.status).toBe("pending");
+    expect(log.authority).toBe("auth_abc_1");
+    expect(log.createdAt).toBeInstanceOf(Date);
+
+    const byToken = await prisma.paymentToken.findUnique({
+      where: { token: "tok_happy_unique_1" },
+      include: { installment: true, business: true },
+    });
+    expect(byToken).not.toBeNull();
+    expect(byToken!.installment.id).toBe(installment.id);
+    expect(byToken!.business.id).toBe(business.id);
+
+    const byTxn = await prisma.paymentLog.findUnique({
+      where: { transactionId: "txn_happy_unique_1" },
+    });
+    expect(byTxn).not.toBeNull();
+    expect(byTxn!.installmentId).toBe(installment.id);
+  });
+
+  it("edge: two PaymentLogs sharing the same transactionId violate the UNIQUE (prevents bug #2 double-payment)", async () => {
+    const business = await prisma.business.create({
+      data: { name: "Payment Unique Shop", type: "retail" },
+    });
+    const customer = await prisma.customer.create({
+      data: {
+        businessId: business.id,
+        name: "مینا تقوی",
+        nameNormalized: "مینا تقوی",
+        phoneEnc: Buffer.from("enc-p-2", "utf8"),
+        phoneHash: "hash_payment_edge_1",
+        phoneLast4: "7777",
+      },
+    });
+    const contract = await prisma.contract.create({
+      data: {
+        businessId: business.id,
+        customerId: customer.id,
+        totalAmountRial: 30_000_000,
+        downPaymentRial: 0,
+        installmentCount: 3,
+        intervalMonths: 1,
+        startDate: new Date("2026-09-01T00:00:00.000Z"),
+      },
+    });
+    const installment = await prisma.installment.create({
+      data: {
+        businessId: business.id,
+        contractId: contract.id,
+        seq: 1,
+        amountRial: 10_000_000,
+        dueDate: new Date("2026-10-01T00:00:00.000Z"),
+      },
+    });
+
+    await prisma.paymentLog.create({
+      data: {
+        businessId: business.id,
+        installmentId: installment.id,
+        transactionId: "txn_duplicate_1",
+        amountRial: 10_000_000,
+      },
+    });
+
+    await expect(
+      prisma.paymentLog.create({
+        data: {
+          businessId: business.id,
+          installmentId: installment.id,
+          transactionId: "txn_duplicate_1",
+          amountRial: 10_000_000,
+        },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("edge: two PaymentTokens sharing the same token violate the UNIQUE (prevents token reuse)", async () => {
+    const business = await prisma.business.create({
+      data: { name: "Token Unique Shop", type: "retail" },
+    });
+    const customer = await prisma.customer.create({
+      data: {
+        businessId: business.id,
+        name: "بهرام نجفی",
+        nameNormalized: "بهرام نجفی",
+        phoneEnc: Buffer.from("enc-p-3", "utf8"),
+        phoneHash: "hash_payment_edge_2",
+        phoneLast4: "8888",
+      },
+    });
+    const contract = await prisma.contract.create({
+      data: {
+        businessId: business.id,
+        customerId: customer.id,
+        totalAmountRial: 20_000_000,
+        downPaymentRial: 0,
+        installmentCount: 2,
+        intervalMonths: 1,
+        startDate: new Date("2026-11-01T00:00:00.000Z"),
+      },
+    });
+    const installment = await prisma.installment.create({
+      data: {
+        businessId: business.id,
+        contractId: contract.id,
+        seq: 1,
+        amountRial: 10_000_000,
+        dueDate: new Date("2026-12-01T00:00:00.000Z"),
+      },
+    });
+
+    await prisma.paymentToken.create({
+      data: {
+        businessId: business.id,
+        installmentId: installment.id,
+        token: "tok_duplicate_1",
+        expiresAt: new Date(Date.now() + 3600_000),
+      },
+    });
+
+    await expect(
+      prisma.paymentToken.create({
+        data: {
+          businessId: business.id,
+          installmentId: installment.id,
+          token: "tok_duplicate_1",
+          expiresAt: new Date(Date.now() + 3600_000),
+        },
+      }),
     ).rejects.toThrow();
   });
 
