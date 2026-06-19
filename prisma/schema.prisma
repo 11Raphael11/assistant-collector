@@ -25,6 +25,8 @@ model Business {
   installments     Installment[]
   paymentTokens    PaymentToken[]
   paymentLogs      PaymentLog[]
+  messages         Message[]
+  messageTemplates MessageTemplate[]
 }
 
 model Customer {
@@ -103,6 +105,7 @@ model Installment {
   contract           Contract          @relation(fields: [contractId], references: [id])
   paymentTokens      PaymentToken[]
   paymentLogs        PaymentLog[]
+  messages           Message[]
 
   @@index([dueDate, status])
   @@index([businessId, status])
@@ -144,6 +147,63 @@ model PaymentLog {
 
   @@index([businessId, createdAt])
   @@index([installmentId])
+}
+
+enum MessageStage {
+  before
+  due_day
+  after3
+  after7
+  otp
+  payment_confirm
+}
+
+enum MessageStatus {
+  queued
+  sending
+  sent
+  failed
+  dead
+}
+
+model Message {
+  id              String        @id @default(cuid())
+  businessId      String
+  installmentId   String?
+  to              String
+  body            String
+  stage           MessageStage
+  status          MessageStatus @default(queued)
+  idempotencyKey  String        @unique
+  attempts        Int           @default(0)
+  nextAttemptAt   DateTime?
+  providerRef     String?
+  createdAt       DateTime      @default(now())
+  business        Business      @relation(fields: [businessId], references: [id])
+  installment     Installment?  @relation(fields: [installmentId], references: [id])
+
+  @@index([status, nextAttemptAt])
+  @@index([businessId])
+  @@index([installmentId])
+}
+
+enum MessageTone {
+  friendly
+  formal
+  firm
+}
+
+model MessageTemplate {
+  id         String       @id @default(cuid())
+  businessId String
+  kind       MessageStage
+  tone       MessageTone
+  body       String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  business   Business     @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, kind, tone])
 }
 
 enum UserRole {
