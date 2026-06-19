@@ -5,6 +5,7 @@ describe("Business model", () => {
   const prisma = new PrismaClient();
 
   afterAll(async () => {
+    await prisma.customer.deleteMany();
     await prisma.user.deleteMany();
     await prisma.subscription.deleteMany();
     await prisma.plan.deleteMany();
@@ -180,6 +181,81 @@ describe("Business model", () => {
           phoneLast4: "9999",
           passwordHash: "bcrypt$dummy$b",
           role: "staff",
+        },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("happy: two Businesses may each have a Customer with the same phoneHash (uniqueness is per-business)", async () => {
+    const businessA = await prisma.business.create({
+      data: { name: "Customer Shop A", type: "retail" },
+    });
+    const businessB = await prisma.business.create({
+      data: { name: "Customer Shop B", type: "retail" },
+    });
+
+    const phoneHash = "hash_shared_across_businesses";
+
+    const customerA = await prisma.customer.create({
+      data: {
+        businessId: businessA.id,
+        name: "علی رضایی",
+        nameNormalized: "علی رضایی",
+        phoneEnc: Buffer.from("enc-a", "utf8"),
+        phoneHash,
+        phoneLast4: "1111",
+      },
+    });
+
+    const customerB = await prisma.customer.create({
+      data: {
+        businessId: businessB.id,
+        name: "محمد احمدی",
+        nameNormalized: "محمد احمدی",
+        phoneEnc: Buffer.from("enc-b", "utf8"),
+        phoneHash,
+        phoneLast4: "1111",
+      },
+    });
+
+    expect(customerA.id).toBeTruthy();
+    expect(customerB.id).toBeTruthy();
+    expect(customerA.businessId).not.toBe(customerB.businessId);
+    expect(customerA.phoneHash).toBe(customerB.phoneHash);
+    expect(customerA.nationalIdEnc).toBeNull();
+    expect(customerA.nationalIdHash).toBeNull();
+    expect(customerA.note).toBeNull();
+    expect(customerA.deletedAt).toBeNull();
+    expect(customerA.createdAt).toBeInstanceOf(Date);
+  });
+
+  it("edge: a duplicate (businessId, phoneHash) within one business violates the composite UNIQUE", async () => {
+    const business = await prisma.business.create({
+      data: { name: "Customer Unique Shop", type: "retail" },
+    });
+
+    const phoneHash = "hash_customer_duplicate_1";
+
+    await prisma.customer.create({
+      data: {
+        businessId: business.id,
+        name: "زهرا کریمی",
+        nameNormalized: "زهرا کریمی",
+        phoneEnc: Buffer.from("enc-1", "utf8"),
+        phoneHash,
+        phoneLast4: "2222",
+      },
+    });
+
+    await expect(
+      prisma.customer.create({
+        data: {
+          businessId: business.id,
+          name: "زهرا کریمی دوم",
+          nameNormalized: "زهرا کریمی دوم",
+          phoneEnc: Buffer.from("enc-2", "utf8"),
+          phoneHash,
+          phoneLast4: "2222",
         },
       }),
     ).rejects.toThrow();
