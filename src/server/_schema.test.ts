@@ -5,6 +5,7 @@ describe("Business model", () => {
   const prisma = new PrismaClient();
 
   afterAll(async () => {
+    await prisma.installment.deleteMany();
     await prisma.contract.deleteMany();
     await prisma.customer.deleteMany();
     await prisma.user.deleteMany();
@@ -336,5 +337,111 @@ describe("Business model", () => {
         },
       }),
     ).rejects.toThrow();
+  });
+
+  it("happy: create an Installment with status=pending, paidAmountRial defaults to 0, lastReminderStage=0", async () => {
+    const business = await prisma.business.create({
+      data: { name: "Installment Shop", type: "retail" },
+    });
+
+    const customer = await prisma.customer.create({
+      data: {
+        businessId: business.id,
+        name: "نرگس صادقی",
+        nameNormalized: "نرگس صادقی",
+        phoneEnc: Buffer.from("enc-i-1", "utf8"),
+        phoneHash: "hash_installment_happy_1",
+        phoneLast4: "4444",
+      },
+    });
+
+    const contract = await prisma.contract.create({
+      data: {
+        businessId: business.id,
+        customerId: customer.id,
+        totalAmountRial: 60_000_000,
+        downPaymentRial: 0,
+        installmentCount: 6,
+        intervalMonths: 1,
+        startDate: new Date("2026-03-01T00:00:00.000Z"),
+      },
+    });
+
+    const dueDate = new Date("2026-04-01T00:00:00.000Z");
+    const installment = await prisma.installment.create({
+      data: {
+        businessId: business.id,
+        contractId: contract.id,
+        seq: 1,
+        amountRial: 10_000_000,
+        dueDate,
+      },
+    });
+
+    expect(installment.id).toBeTruthy();
+    expect(installment.businessId).toBe(business.id);
+    expect(installment.contractId).toBe(contract.id);
+    expect(installment.seq).toBe(1);
+    expect(Number.isInteger(installment.amountRial)).toBe(true);
+    expect(installment.amountRial).toBe(10_000_000);
+    expect(installment.paidAmountRial).toBe(0);
+    expect(installment.dueDate.toISOString()).toBe(dueDate.toISOString());
+    expect(installment.status).toBe("pending");
+    expect(installment.lastReminderStage).toBe(0);
+    expect(installment.lastReminderAt).toBeNull();
+    expect(installment.paidAt).toBeNull();
+    expect(installment.deletedAt).toBeNull();
+    expect(installment.createdAt).toBeInstanceOf(Date);
+  });
+
+  it("edge: an invalid Installment status value is rejected by the enum", async () => {
+    const business = await prisma.business.create({
+      data: { name: "Installment Enum Shop", type: "retail" },
+    });
+    const customer = await prisma.customer.create({
+      data: {
+        businessId: business.id,
+        name: "سارا حیدری",
+        nameNormalized: "سارا حیدری",
+        phoneEnc: Buffer.from("enc-i-2", "utf8"),
+        phoneHash: "hash_installment_edge_1",
+        phoneLast4: "5555",
+      },
+    });
+    const contract = await prisma.contract.create({
+      data: {
+        businessId: business.id,
+        customerId: customer.id,
+        totalAmountRial: 30_000_000,
+        downPaymentRial: 0,
+        installmentCount: 3,
+        intervalMonths: 1,
+        startDate: new Date("2026-05-01T00:00:00.000Z"),
+      },
+    });
+
+    await expect(
+      prisma.$executeRawUnsafe(
+        `INSERT INTO "Installment" ("id","businessId","contractId","seq","amountRial","paidAmountRial","dueDate","status","lastReminderStage","createdAt") VALUES ($1,$2,$3,$4,$5,$6,$7,$8::"InstallmentStatus",$9,NOW())`,
+        "inst_invalid_status_1",
+        business.id,
+        contract.id,
+        1,
+        10_000_000,
+        0,
+        new Date("2026-06-01T00:00:00.000Z"),
+        "not_a_real_status",
+        0,
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("happy: the critical (dueDate, status) index exists (prevents full scans / bug #6)", async () => {
+    const rows = await prisma.$queryRawUnsafe<Array<{ indexname: string; indexdef: string }>>(
+      `SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'Installment' AND indexname = 'Installment_dueDate_status_idx'`,
+    );
+    expect(rows.length).toBe(1);
+    expect(rows[0].indexdef).toMatch(/"dueDate"/);
+    expect(rows[0].indexdef).toMatch(/\bstatus\b/);
   });
 });
