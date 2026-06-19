@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { PrismaClient } from "@prisma/client";
 import { execSync } from "node:child_process";
+import { prisma } from "./db";
 import {
   seed,
   DEMO_BUSINESS_ID,
@@ -13,8 +13,6 @@ import {
 } from "../../prisma/seed";
 import { normalizePhone } from "../lib/phone";
 import { blindIndex } from "../lib/crypto";
-
-const prisma = new PrismaClient();
 
 async function cleanupDemoRows(): Promise<void> {
   await prisma.installment.deleteMany({ where: { businessId: DEMO_BUSINESS_ID } });

@@ -1,23 +1,18 @@
-import { PrismaClient } from "@prisma/client";
+import { pingDb } from "@/server/db";
 import { logger } from "@/lib/logger";
 
-const prisma = new PrismaClient();
-
 async function checkDb(): Promise<boolean> {
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    return true;
-  } catch (err) {
+  const up = await pingDb();
+  if (!up) {
     logger.error(
       {
         action: "health_check",
         result: "db_down",
-        error: err instanceof Error ? err.message : String(err),
       },
       "health check: database unreachable",
     );
-    return false;
   }
+  return up;
 }
 
 export async function GET(): Promise<Response> {

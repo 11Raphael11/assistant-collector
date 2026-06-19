@@ -1,8 +1,7 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "./db";
 
 describe("Business model", () => {
-  const prisma = new PrismaClient();
 
   afterAll(async () => {
     await prisma.followUpEvent.deleteMany();
