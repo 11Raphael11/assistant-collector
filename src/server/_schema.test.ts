@@ -5,6 +5,7 @@ describe("Business model", () => {
   const prisma = new PrismaClient();
 
   afterAll(async () => {
+    await prisma.contract.deleteMany();
     await prisma.customer.deleteMany();
     await prisma.user.deleteMany();
     await prisma.subscription.deleteMany();
@@ -256,6 +257,82 @@ describe("Business model", () => {
           phoneEnc: Buffer.from("enc-2", "utf8"),
           phoneHash,
           phoneLast4: "2222",
+        },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("happy: create a Contract for a Customer with integer Rial fields and default status=active", async () => {
+    const business = await prisma.business.create({
+      data: { name: "Contract Shop", type: "retail" },
+    });
+
+    const customer = await prisma.customer.create({
+      data: {
+        businessId: business.id,
+        name: "حسین موسوی",
+        nameNormalized: "حسین موسوی",
+        phoneEnc: Buffer.from("enc-c-1", "utf8"),
+        phoneHash: "hash_contract_happy_1",
+        phoneLast4: "3333",
+      },
+    });
+
+    const startDate = new Date("2026-01-15T00:00:00.000Z");
+    const contract = await prisma.contract.create({
+      data: {
+        businessId: business.id,
+        customerId: customer.id,
+        totalAmountRial: 120_000_000,
+        downPaymentRial: 20_000_000,
+        installmentCount: 10,
+        intervalMonths: 1,
+        startDate,
+      },
+    });
+
+    expect(contract.id).toBeTruthy();
+    expect(contract.businessId).toBe(business.id);
+    expect(contract.customerId).toBe(customer.id);
+    expect(Number.isInteger(contract.totalAmountRial)).toBe(true);
+    expect(Number.isInteger(contract.downPaymentRial)).toBe(true);
+    expect(contract.totalAmountRial).toBe(120_000_000);
+    expect(contract.downPaymentRial).toBe(20_000_000);
+    expect(contract.installmentCount).toBe(10);
+    expect(contract.intervalMonths).toBe(1);
+    expect(contract.startDate.toISOString()).toBe(startDate.toISOString());
+    expect(contract.status).toBe("active");
+    expect(contract.deletedAt).toBeNull();
+    expect(contract.createdAt).toBeInstanceOf(Date);
+
+    const withRelations = await prisma.contract.findUnique({
+      where: { id: contract.id },
+      include: { business: true, customer: true },
+    });
+    expect(withRelations).not.toBeNull();
+    expect(withRelations!.business.id).toBe(business.id);
+    expect(withRelations!.customer.id).toBe(customer.id);
+  });
+
+  it("edge: a Contract referencing a non-existent customerId violates the FK constraint", async () => {
+    // NOTE: A Contract whose customerId belongs to a different business is allowed
+    // at the DB level by design — the (businessId, customerId) scope guard is the
+    // repository's responsibility, not Postgres'. Here we assert that the FK on
+    // customerId itself does exist by attempting to create with a bogus id.
+    const business = await prisma.business.create({
+      data: { name: "Contract FK Shop", type: "retail" },
+    });
+
+    await expect(
+      prisma.contract.create({
+        data: {
+          businessId: business.id,
+          customerId: "customer_does_not_exist",
+          totalAmountRial: 50_000_000,
+          downPaymentRial: 0,
+          installmentCount: 5,
+          intervalMonths: 1,
+          startDate: new Date("2026-02-01T00:00:00.000Z"),
         },
       }),
     ).rejects.toThrow();

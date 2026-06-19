@@ -21,6 +21,7 @@ model Business {
   subscriptions    Subscription[]
   users            User[]
   customers        Customer[]
+  contracts        Contract[]
 }
 
 model Customer {
@@ -37,10 +38,36 @@ model Customer {
   createdAt        DateTime  @default(now())
   deletedAt        DateTime?
   business         Business  @relation(fields: [businessId], references: [id])
+  contracts        Contract[]
 
   @@unique([businessId, phoneHash])
   @@index([businessId])
   @@index([businessId, nameNormalized])
+}
+
+enum ContractStatus {
+  active
+  completed
+  canceled
+}
+
+model Contract {
+  id                String         @id @default(cuid())
+  businessId        String
+  customerId        String
+  totalAmountRial   Int
+  downPaymentRial   Int            @default(0)
+  installmentCount  Int
+  intervalMonths    Int
+  startDate         DateTime
+  status            ContractStatus @default(active)
+  createdAt         DateTime       @default(now())
+  deletedAt         DateTime?
+  business          Business       @relation(fields: [businessId], references: [id])
+  customer          Customer       @relation(fields: [customerId], references: [id])
+
+  @@index([businessId])
+  @@index([businessId, customerId])
 }
 
 enum UserRole {
