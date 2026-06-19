@@ -22,6 +22,7 @@ model Business {
   users            User[]
   customers        Customer[]
   contracts        Contract[]
+  installments     Installment[]
 }
 
 model Customer {
@@ -65,9 +66,43 @@ model Contract {
   deletedAt         DateTime?
   business          Business       @relation(fields: [businessId], references: [id])
   customer          Customer       @relation(fields: [customerId], references: [id])
+  installments      Installment[]
 
   @@index([businessId])
   @@index([businessId, customerId])
+}
+
+enum InstallmentStatus {
+  pending
+  due_soon
+  overdue
+  promised
+  partially_paid
+  paid
+  in_legal
+  canceled
+}
+
+model Installment {
+  id                 String            @id @default(cuid())
+  businessId         String
+  contractId         String
+  seq                Int
+  amountRial         Int
+  paidAmountRial     Int               @default(0)
+  dueDate            DateTime
+  status             InstallmentStatus @default(pending)
+  lastReminderStage  Int               @default(0)
+  lastReminderAt     DateTime?
+  paidAt             DateTime?
+  createdAt          DateTime          @default(now())
+  deletedAt          DateTime?
+  business           Business          @relation(fields: [businessId], references: [id])
+  contract           Contract          @relation(fields: [contractId], references: [id])
+
+  @@index([dueDate, status])
+  @@index([businessId, status])
+  @@index([contractId])
 }
 
 enum UserRole {
