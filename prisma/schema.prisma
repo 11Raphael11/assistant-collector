@@ -289,3 +289,11 @@ model Subscription {
 
   @@index([businessId])
 }
+
+model RateBucket {
+  key         String
+  windowStart DateTime @db.Timestamptz
+  count       Int      @default(1)
+
+  @@id([key, windowStart])
+}
