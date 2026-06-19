@@ -8,3 +8,4 @@ export {
 } from "./guard";
 export { requestOtp, verifyOtp } from "./otp";
 export { register } from "./register";
+export { loginWithPassword, loginWithOtp } from "./login";
