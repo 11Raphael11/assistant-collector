@@ -7,3 +7,4 @@ export {
   getRepoApi,
 } from "./guard";
 export { requestOtp, verifyOtp } from "./otp";
+export { register } from "./register";
