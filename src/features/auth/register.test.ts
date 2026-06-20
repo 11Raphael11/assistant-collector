@@ -3,16 +3,22 @@ import { prisma } from "@/server/db";
 import { register } from "./register";
 import { MockSmsProvider } from "@/providers/sms/mock";
 import { blindIndex } from "@/lib/crypto";
+import { normalizePhone } from "@/lib/phone";
 
 const TEST_PHONE = "09331112233";
-const TEST_PHONE_HASH = blindIndex(TEST_PHONE);
+
+function testPhoneHash(): string {
+  const result = normalizePhone(TEST_PHONE);
+  if (!result.ok) throw new Error("TEST_PHONE is invalid");
+  return blindIndex(result.value);
+}
 
 async function cleanup(): Promise<void> {
-  await prisma.otpCode.deleteMany({ where: { phoneHash: TEST_PHONE_HASH } });
+  await prisma.otpCode.deleteMany({ where: { phoneHash: testPhoneHash() } });
   await prisma.$executeRaw`
-    DELETE FROM "RateBucket" WHERE "key" LIKE ${"otp:" + TEST_PHONE_HASH}
+    DELETE FROM "RateBucket" WHERE "key" LIKE ${"otp:" + testPhoneHash()}
   `;
-  const user = await prisma.user.findUnique({ where: { phoneHash: TEST_PHONE_HASH } });
+  const user = await prisma.user.findUnique({ where: { phoneHash: testPhoneHash() } });
   if (user) {
     await prisma.session.deleteMany({ where: { userId: user.id } });
     await prisma.user.delete({ where: { id: user.id } });
@@ -47,7 +53,7 @@ describe("features/auth/register", () => {
       expect(result.value.phone).toBe(TEST_PHONE);
     }
 
-    const user = await prisma.user.findUnique({ where: { phoneHash: TEST_PHONE_HASH } });
+    const user = await prisma.user.findUnique({ where: { phoneHash: testPhoneHash() } });
     expect(user).not.toBeNull();
     expect(user!.role).toBe("owner");
     expect(user!.phoneLast4).toBe("2233");
@@ -93,7 +99,7 @@ describe("features/auth/register", () => {
       expect(result.error.code).toBe("SMS_SEND_FAILED");
     }
 
-    const user = await prisma.user.findUnique({ where: { phoneHash: TEST_PHONE_HASH } });
+    const user = await prisma.user.findUnique({ where: { phoneHash: testPhoneHash() } });
     expect(user).toBeNull();
   });
 

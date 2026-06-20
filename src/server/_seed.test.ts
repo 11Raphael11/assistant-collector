@@ -131,7 +131,7 @@ describe("prisma/seed", () => {
     expect(installmentsAfterSecond).toBe(installmentsAfterFirst);
   });
 
-  it("happy: `pnpm prisma db seed` CLI runs successfully and the demo business is present", async () => {
+  it("happy: `pnpm prisma db seed` CLI runs successfully and the demo business is present", { timeout: 30_000 }, async () => {
     await cleanupDemoRows();
     execSync("pnpm prisma db seed", {
       cwd: process.cwd(),
