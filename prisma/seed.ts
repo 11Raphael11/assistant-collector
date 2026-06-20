@@ -203,34 +203,6 @@ export async function seed(): Promise<void> {
     { seq: 6, status: "pending" as const, dueOffsetDays: 150, paid: false },
   ];
   const amountA = contractA.totalAmountRial / contractA.installmentCount;
-  for (const i of installmentsA) {
-    const id = `demo_inst_a_${i.seq}`;
-    const dueDate = new Date(baseA + i.dueOffsetDays * 86_400_000);
-    await prisma.installment.upsert({
-      where: { id },
-      update: {
-        businessId: DEMO_BUSINESS_ID,
-        contractId: contractA.id,
-        seq: i.seq,
-        amountRial: amountA,
-        paidAmountRial: i.paid ? amountA : 0,
-        paidAt: i.paid ? dueDate : null,
-        dueDate,
-        status: i.status,
-      },
-      create: {
-        id,
-        businessId: DEMO_BUSINESS_ID,
-        contractId: contractA.id,
-        seq: i.seq,
-        amountRial: amountA,
-        paidAmountRial: i.paid ? amountA : 0,
-        paidAt: i.paid ? dueDate : null,
-        dueDate,
-        status: i.status,
-      },
-    });
-  }
 
   const baseB = contractB.startDate.getTime();
   const installmentsB = [
@@ -242,17 +214,31 @@ export async function seed(): Promise<void> {
   const amountB =
     (contractB.totalAmountRial - contractB.downPaymentRial) /
     contractB.installmentCount;
-  for (const i of installmentsB) {
-    const id = `demo_inst_b_${i.seq}`;
-    const dueDate = new Date(baseB + i.dueOffsetDays * 86_400_000);
-    const paidAmountRial = i.paid
-      ? amountB
-      : i.status === "partially_paid"
-        ? Math.floor(amountB / 2)
-        : 0;
-    await prisma.installment.upsert({
-      where: { id },
-      update: {
+
+  const installmentData = [
+    ...installmentsA.map((i) => {
+      const dueDate = new Date(baseA + i.dueOffsetDays * 86_400_000);
+      return {
+        id: `demo_inst_a_${i.seq}`,
+        businessId: DEMO_BUSINESS_ID,
+        contractId: contractA.id,
+        seq: i.seq,
+        amountRial: amountA,
+        paidAmountRial: i.paid ? amountA : 0,
+        paidAt: i.paid ? dueDate : null,
+        dueDate,
+        status: i.status,
+      };
+    }),
+    ...installmentsB.map((i) => {
+      const dueDate = new Date(baseB + i.dueOffsetDays * 86_400_000);
+      const paidAmountRial = i.paid
+        ? amountB
+        : i.status === "partially_paid"
+          ? Math.floor(amountB / 2)
+          : 0;
+      return {
+        id: `demo_inst_b_${i.seq}`,
         businessId: DEMO_BUSINESS_ID,
         contractId: contractB.id,
         seq: i.seq,
@@ -261,20 +247,13 @@ export async function seed(): Promise<void> {
         paidAt: i.paid ? dueDate : null,
         dueDate,
         status: i.status,
-      },
-      create: {
-        id,
-        businessId: DEMO_BUSINESS_ID,
-        contractId: contractB.id,
-        seq: i.seq,
-        amountRial: amountB,
-        paidAmountRial,
-        paidAt: i.paid ? dueDate : null,
-        dueDate,
-        status: i.status,
-      },
-    });
-  }
+      };
+    }),
+  ];
+
+  // Delete then recreate to guarantee idempotent count regardless of prior state.
+  await prisma.installment.deleteMany({ where: { businessId: DEMO_BUSINESS_ID } });
+  await prisma.installment.createMany({ data: installmentData });
 }
 
 async function main(): Promise<void> {
