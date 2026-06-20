@@ -28,7 +28,7 @@ interface InsertCustomerInput {
   note?: string;
 }
 
-function toRow(c: Customer): CustomerRow {
+export function toRow(c: Customer): CustomerRow {
   return {
     id: c.id,
     businessId: c.businessId,
