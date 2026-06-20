@@ -4,6 +4,7 @@ import { prisma } from "./db";
 describe("Business model", () => {
 
   afterAll(async () => {
+    await prisma.session.deleteMany();
     await prisma.followUpEvent.deleteMany();
     await prisma.message.deleteMany();
     await prisma.messageTemplate.deleteMany();
