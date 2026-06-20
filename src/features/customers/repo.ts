@@ -28,6 +28,13 @@ interface InsertCustomerInput {
   note?: string;
 }
 
+interface UpdateCustomerInput {
+  name?: string;
+  phone?: string;
+  nationalId?: string;
+  note?: string;
+}
+
 export function toRow(c: Customer): CustomerRow {
   return {
     id: c.id,
@@ -63,6 +70,7 @@ export interface CustomerRepository {
     take?: number;
     skip?: number;
   }): Promise<CustomerRow[]>;
+  updateCustomer(id: string, input: UpdateCustomerInput): Promise<CustomerRowWithPhone | null>;
   softDeleteCustomer(id: string): Promise<boolean>;
 }
 
@@ -133,6 +141,37 @@ export function createCustomerRepository(
         orderBy: { createdAt: "desc" },
       });
       return customers.map(toRow);
+    },
+
+    async updateCustomer(id, input) {
+      const data: Record<string, unknown> = {};
+
+      if (input.name !== undefined) {
+        data.name = input.name;
+        data.nameNormalized = normalizePersian(input.name);
+      }
+
+      if (input.phone !== undefined) {
+        data.phoneEnc = Buffer.from(encryptPII(input.phone), "utf8");
+        data.phoneHash = blindIndex(input.phone);
+        data.phoneLast4 = last4(input.phone);
+      }
+
+      if (input.nationalId !== undefined) {
+        data.nationalIdEnc = Buffer.from(encryptPII(input.nationalId), "utf8");
+        data.nationalIdHash = blindIndex(input.nationalId);
+      }
+
+      if (input.note !== undefined) {
+        data.note = input.note;
+      }
+
+      const updated = await repo.customers.update(id, data);
+      if (!updated) return null;
+
+      const result = toRowWithPhone(updated);
+      if (!result.ok) return null;
+      return result.value;
     },
 
     async softDeleteCustomer(id) {
